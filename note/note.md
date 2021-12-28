@@ -319,12 +319,16 @@
   }
   ```
 
+  
+
   ```xml
   <!--  实例工厂创建bean  -->
   <bean id="objectFactory" class="com.echo.chapter1.beanoverview.ObjectFactory" />
   <bean id="student" factory-bean="objectFactory" factory-method="getStudent" />
   <bean id="studentDao" factory-bean="objectFactory" factory-method="getStudentDao" />
   ```
+
+  
 
   ```java
   public static void main(String[] args) {
@@ -336,9 +340,100 @@
   }
   ```
 
-  ### 1.4 依赖性
-
   
+
+### 1.4 依赖性
+
+- 控制翻转与依赖注入  https://www.jianshu.com/p/07af9dbbbc4b
+
+- 依赖注入有两种主要的形式：基于构造函数的依赖注入和基于Setter的依赖注入
+
+- 基于构造函数的依赖注入
+  对于类型已知，且不存在歧义的构造函数参数，不需要明确指定其类型
+
+  ```java
+  public class ThingOne {
+      private ThingTwo thingTwo;
+      private ThingThree thingThree;
+  
+      public ThingOne(ThingTwo thingTwo,ThingThree thingThree){
+          this.thingTwo = thingTwo;
+          this.thingThree = thingThree;
+      }
+  }
+  ```
+
+  ```xml
+  <bean id="thingOne" class="com.echo.chapter1.dependencies.ThingOne">
+      <constructor-arg ref="thingTwo"/>
+      <constructor-arg ref="thingThree"/>
+  </bean>
+  <bean id="thingTwo" class="com.echo.chapter1.dependencies.ThingTwo">
+  </bean>
+  <bean id="thingThree" class="com.echo.chapter1.dependencies.ThingThree">
+  
+  </bean>
+  ```
+
+  对于类型未知或基本数据类型的构造函数参数，则需要指定参数类型
+
+  ```java
+  public class ExampleBean {
+      private int years;
+      private String ultimateAnswer;
+  
+      public ExampleBean(int years,String ultimateAnswer){
+          this.years = years;
+          this.ultimateAnswer = ultimateAnswer;
+      }
+  }
+  ```
+
+  ```xml
+  <bean id="exampleBean" class="com.echo.chapter1.dependencies.ExampleBean">
+      <constructor-arg type="int" value="750000"/>
+      <constructor-arg type="java.lang.String" value="42" />
+  </bean>
+  ```
+
+  也可以使用index属性显示指定构造函数参数的索引
+
+  ```xml
+  <bean id="exampleBean" class="com.echo.chapter1.dependencies.ExampleBean">
+      <constructor-arg index="0" value="75000"/>
+      <constructor-arg index="1" value="42" />
+  </bean>
+  ```
+
+  也可以使用构造函数参数名
+
+  ```xml
+  <bean id="exampleBean" class="com.echo.chapter1.dependencies.ExampleBean">
+      <constructor-arg name="years" value="7500000"/>
+      <constructor-arg name="ultimateAnswer" value="42"/>
+  </bean>
+  ```
+
+- 基于Setter的依赖注入
+  若类中不存在静态工厂方法和有参构造函数，只有setter方法，则只能使用基于Setter的依赖注入。
+
+  如果有一个类存在着只有部分参数的构造函数，那么在通过构造函数方法注入一些依赖项之后，它还支持基于 setter 的 DI。
+
+- 对于强依赖项使用构造函数DI,对于可选依赖项使用基于setter的DI是一个很好的经验法则
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

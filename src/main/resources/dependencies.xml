@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans
+        https://www.springframework.org/schema/beans/spring-beans.xsd">
+    <bean id="thingOne" class="com.echo.chapter1.dependencies.ThingOne">
+        <constructor-arg ref="thingTwo"/>
+        <constructor-arg ref="thingThree"/>
+    </bean>
+    <bean id="thingTwo" class="com.echo.chapter1.dependencies.ThingTwo">
+    </bean>
+    <bean id="thingThree" class="com.echo.chapter1.dependencies.ThingThree">
+    </bean>
+
+    <bean id="exampleBean" class="com.echo.chapter1.dependencies.ExampleBean">
+        <constructor-arg type="int" value="750000"/>
+        <constructor-arg type="java.lang.String" value="42" />
+    </bean>
+
+</beans>

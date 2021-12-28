@@ -4,12 +4,12 @@
        xsi:schemaLocation="http://www.springframework.org/schema/beans
         https://www.springframework.org/schema/beans/spring-beans.xsd">
     <!-- id是bean的唯一标识符 class是bean的类的全限定类名  -->
-<!--    <bean id="studentBean" class="com.echo.pojo.Student" >-->
-<!--        &lt;!&ndash; collaborators and configuration for this bean go here &ndash;&gt;-->
-<!--        <property name="id" value="1"/>-->
-<!--        <property name="name" value="echo" />-->
-<!--        <property name="score" value="90" />-->
-<!--    </bean>-->
+    <bean id="studentBean" class="com.echo.pojo.Student" >
+        <!-- collaborators and configuration for this bean go here -->
+        <property name="id" value="1"/>
+        <property name="name" value="echo" />
+        <property name="score" value="90" />
+    </bean>
 
     <bean id="something" class="com.echo.pojo.Something">
 
@@ -20,7 +20,7 @@
     </bean>
 
     <!--  实例工厂创建bean  -->
-    <bean id="objectFactory" class="com.echo.chapter1.beanoverview.ObjectFactory" />
-    <bean id="student" factory-bean="objectFactory" factory-method="getStudent" />
-    <bean id="studentDao" factory-bean="objectFactory" factory-method="getStudentDao" />
+<!--    <bean id="objectFactory" class="com.echo.chapter1.beanoverview.ObjectFactory" />-->
+<!--    <bean id="student" factory-bean="objectFactory" factory-method="getStudent" />-->
+<!--    <bean id="studentDao" factory-bean="objectFactory" factory-method="getStudentDao" />-->
 </beans>
