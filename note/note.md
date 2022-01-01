@@ -420,8 +420,205 @@
   如果有一个类存在着只有部分参数的构造函数，那么在通过构造函数方法注入一些依赖项之后，它还支持基于 setter 的 DI。
 
 - 对于强依赖项使用构造函数DI,对于可选依赖项使用基于setter的DI是一个很好的经验法则
+
 - 在 setter方法上使用@Required 注释可以使该属性成为必需的依赖项
+
 - Setter 注入的一个好处是 setter 方法使该类的对象容易在以后重新配置或重新注入
+
+- 依赖解析的过程
+
+  - 创建ApplcationContext,使用描述所有Bean的配置文件元数据进行初始化，元数据可以通过XML、Java代码和注解来指定。
+  - 对于每个Bean，其依赖关系通过属性、构造函数参数或静态工厂方法的参数形式表示。在实际创建Bean时，这些依赖项被注入到Bean中
+  - Bean中的依赖项，就是一个类中定义的属性，每个属性或者构造函数参数都是要设置的值的实际定义。或者是容器中对于另一个Bean的引用
+  - 依据在配置文件中定义的元数据，容器会将bean中所依赖的每个属性，转换为所定义的实际类型。默认情况下Spring 可以将以字符串格式提供的值转换为所有内置类型，如 int、 long、 String、 boolean 等。
+
+- 在创建容器时，将创建单例并设置为预实例化(pre-instantiated)(默认情况)的 bean
+
+- 只有在请求 bean 时才会创建它
+
+- 循环依赖
+
+  - 出现场景：主要使用构造函数注入。例如: a 类需要通过构造函数注入的 b 类实例，而 b 类需要通过构造函数注入的 a 类实例。如果将 bean 配置为类 a 和类 b 相互注入，那么 Spring IoC 容器在运行时检测到这个循环引用，并抛出 BeanCurrentlyInCreationException。
+  - 解决方案：
+    1.在编写源代码时，使用setter来设置依赖，在配置代码中，使用Setter注入，尽量避免使用构造函数注入
+    2.避免构造函数注入，只使用setter注入。
+
+- 通常可以相信 Spring 会做正确的事情。它在容器加载时检测配置问题，例如对不存在的 bean 和循环依赖项的引用。
+
+- Spring 设置属性并尽可能晚地解析依赖关系，只有当 bean 实际创建时，才会检测该bean的依赖关系。这就意味着，Spring容器会正确的加载，不会因为某个bean的依赖项有错误才停止加载，只有在请求bean时，这个bean出现了错误，才会抛出异常。
+
+- ApplicationContext 实现会预先实例化单例 bean
+
+- 如果不存在循环依赖关系，当一个或多个被依赖 bean 被注入到依赖 bean 中时，每个被依赖的bean 在被注入到依赖 bean 之前都会被完全配置。这意味着，如果 bean a 对 bean b 有依赖关系，那么在调用 bean a 上的 setter 方法之前，Spring IoC 容器将完全配置 bean b。
+
+- ```xml
+  <bean id="theTargetBean" class="..."/>
+  
+  <bean id="theClientBean" class="...">
+      <property name="targetName">
+          <idref bean="theTargetBean"/>
+      </property>
+  </bean>
+  ```
+
+  ```xml
+  <bean id="theTargetBean" class="..." />
+  
+  <bean id="client" class="...">
+      <property name="targetName" value="theTargetBean"/>
+  </bean>
+  ```
+
+  两种配置方式都一样，但是第一种形式比第二种形式更可取，因为使用 idref 标记可以让容器在部署时验证所引用的命名 bean 是否确实存在。在第二个变体中，不对传递给客户端 bean 的 targetName 属性的值执行验证。
+
+- 内部bean：类似于内部类
+
+  ```xml
+  <bean id="outer" class="...">
+      <!-- instead of using a reference to a target bean, simply define the target bean inline -->
+      <property name="target">
+          <bean class="com.example.Person"> <!-- this is the inner bean -->
+              <property name="name" value="Fiona Apple"/>
+              <property name="age" value="25"/>
+          </bean>
+      </property>
+  </bean>
+  ```
+
+  内部 bean 定义不需要定义的 ID 或名称。如果指定，则容器不使用此值作为标识符。容器在创建内部bean时还忽略范围标志，因为内部 bean 总是匿名的，并且总是用外部 bean 创建的。不可能独立地访问内部 bean，也不可能将它们注入到合作 bean 中，而是注入到包围的 bean 中。
+
+- list set map的注入
+
+  ```java
+  public class MoreComplexObject {
+      private List<String> list;
+      private Map<String,String> map;
+      private Set<String> set;
+  
+      //getter setter igonre
+  
+      public static void main(String[] args) {
+          ApplicationContext context = new ClassPathXmlApplicationContext("dependencies.xml");
+          MoreComplexObject moreComplexObject = context.getBean("moreComplexObject", MoreComplexObject.class);
+          System.out.println(moreComplexObject.getList());
+          System.out.println(moreComplexObject.getMap());
+          System.out.println(moreComplexObject.getSet());
+      }
+  }
+  ```
+
+  ```xml
+  <bean id="moreComplexObject" class="com.echo.chapter1.dependencies.MoreComplexObject">
+      <property name="list">
+          <list>
+              <value>a list demo</value>
+          </list>
+      </property>
+      <property name="map">
+          <map>
+              <entry key="key" value="value" />
+          </map>
+      </property>
+      <property name="set">
+          <set>
+              <value>set</value>
+          </set>
+      </property>
+  </bean>
+  ```
+
+  ```bash
+  [a list demo]
+  {key=value}
+  [set]
+  ```
+
+- 集合和属性的合并
+
+  ```java
+  public class ComplexObject {
+      private Properties properties;
+  
+      public Properties getProperties() {
+          return properties;
+      }
+  
+      public void setProperties(Properties properties) {
+          this.properties = properties;
+      }
+  
+      public static void main(String[] args) {
+          ApplicationContext context = new ClassPathXmlApplicationContext("dependencies.xml");
+          ComplexObject childProperties = context.getBean("childProperties", ComplexObject.class);
+          System.out.println(childProperties.getProperties());
+      }
+  }
+  ```
+
+  ```xml
+  <bean id="parentProperties" class="com.echo.chapter1.dependencies.ComplexObject">
+      <property name="properties">
+          <props>
+              <prop key="admin">admin@163.com</prop>
+              <prop key="support">support@163.com</prop>
+          </props>
+      </property>
+  </bean>
+  <bean id="childProperties" parent="parentProperties">
+      <property name="properties">
+          <props merge="true">    <!-- 合并父属性 -->
+              <prop key="support">support@qq.com</prop>
+              <prop key="sales">sales@163.com</prop>
+          </props>
+      </property>
+  </bean>
+  ```
+
+  ```bash
+  {admin=admin@163.com, support=support@qq.com, sales=sales@163.com}
+  ```
+
+  子 Properties 集合的值集从父 < props/> 继承所有属性元素，子集合的支持值覆盖父集合中的值。不能合并不同的集合类型(如 Map 和 List)。
+
+- Spring 将属性和类似属性的空参数视为空字符串。
+
+  ```xml
+  <bean class="ExampleBean">
+      <property name="email" value=""/>
+  </bean>
+  ```
+
+  等价于
+
+  ```java
+  exampleBean.setEmail("");
+  ```
+
+- 空值处理
+
+  ```xml
+  <bean class="ExampleBean">
+      <property name="email">
+          <null/>
+      </property>
+  </bean>
+  ```
+
+  等价于下面的 Java 代码:
+
+  ```java
+  exampleBean.setEmail(null);
+  ```
+
+  
+
+
+
+
+
+
+
+
 
 
 

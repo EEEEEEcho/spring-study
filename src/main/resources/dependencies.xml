@@ -16,5 +16,49 @@
         <constructor-arg type="int" value="750000"/>
         <constructor-arg type="java.lang.String" value="42" />
     </bean>
+    <bean id="exampleBean2" class="com.echo.chapter1.dependencies.ExampleBean2">
+        <property name="anotherBean" ref="anotherBean"/>
+        <property name="yetAnotherBean" ref="yetAnotherBean" />
+        <property name="year" value="5"/>
+    </bean>
+    <bean id="anotherBean" class="com.echo.chapter1.dependencies.AnotherBean">
+    </bean>
+    <bean id="yetAnotherBean" class="com.echo.chapter1.dependencies.YetAnotherBean">
 
+    </bean>
+
+    <bean id="moreComplexObject" class="com.echo.chapter1.dependencies.MoreComplexObject">
+        <property name="list">
+            <list>
+                <value>a list demo</value>
+            </list>
+        </property>
+        <property name="map">
+            <map>
+                <entry key="key" value="value" />
+            </map>
+        </property>
+        <property name="set">
+            <set>
+                <value>set</value>
+            </set>
+        </property>
+    </bean>
+
+    <bean id="parentProperties" class="com.echo.chapter1.dependencies.ComplexObject">
+        <property name="properties">
+            <props>
+                <prop key="admin">admin@163.com</prop>
+                <prop key="support">support@163.com</prop>
+            </props>
+        </property>
+    </bean>
+    <bean id="childProperties" parent="parentProperties">
+        <property name="properties">
+            <props merge="true">    <!-- 合并父属性 -->
+                <prop key="support">support@qq.com</prop>
+                <prop key="sales">sales@163.com</prop>
+            </props>
+        </property>
+    </bean>
 </beans>
