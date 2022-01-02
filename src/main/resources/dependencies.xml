@@ -53,7 +53,7 @@
             </props>
         </property>
     </bean>
-    <bean id="childProperties" parent="parentProperties">
+    <bean id="childProperties" parent="parentProperties" >
         <property name="properties">
             <props merge="true">    <!-- 合并父属性 -->
                 <prop key="support">support@qq.com</prop>
@@ -61,4 +61,5 @@
             </props>
         </property>
     </bean>
+
 </beans>

@@ -610,13 +610,170 @@
   exampleBean.setEmail(null);
   ```
 
+- depend-on属性：
+  depend-on属性表示对单个bean的依赖，可以在初始化元素之前显示强制初始化一个或者多个bean
+
+  ```xml
+  <bean id="beanOne" class="ExampleBean" depends-on="manager"/>
+  <bean id="manager" class="ManagerBean" />
+  ```
+
+  会在beanOne初始化之前强制初始化名为manager的bean。
+
+  ```xml
+  <bean id="beanOne" class="ExampleBean" depends-on="manager,accountDao">
+      <property name="manager" ref="manager" />
+  </bean>
   
+  <bean id="manager" class="ManagerBean" />
+  <bean id="accountDao" class="x.y.jdbc.JdbcAccountDao" />
+  ```
 
+  会在beanOne初始化之前，强制初始化名为manager和accountDao的bean
 
+- bean的延迟加载：ApplicationContext的默认行为是在容器初始化完成之后，就初始化好那些作用域为singleton的bean，但是如果不想这样做，而是想让bean变为按需加载时，则在bean元素上设置lazy-init属性为true，该bean就会变成按需加载。
 
+  ```xml
+  <bean id="lazy" class="com.something.ExpensiveToCreateBean" lazy-init="true"/>
+  <bean name="not.lazy" class="com.something.AnotherBean"/>
+  ```
 
+- 但是，如果一个惰性初始化的 bean 是一个单例 bean 的依赖项，而这个单例 bean 并不是惰性初始化的，那么 ApplicationContext 会在启动时创建惰性初始化的 bean，因为它必须满足单例依赖项。延迟初始化的 bean 被注入到其他地方的单例 bean 中，这个单例 bean 并不是延迟初始化的。
+  还可以使用 < beans/> 元素的 default-lazy-init 属性在容器级别控制延迟初始化
 
+  ```xml
+  <beans default-lazy-init="true">
+      <!-- no beans will be pre-instantiated... -->
+  </beans>
+  ```
 
+- 可以让Spring通过检查ApplicationContext中的内容来自动装配相互协作的bean之间的关系。
+
+  优点：
+
+  1. 自动装配可以显著减少指定属性或构造函数参数的需要
+  2.  自动装配可以随时更新一个bean的状态
+
+- 当使用基于 xml 的配置元数据时(参见依赖注入) ，可以使用 < bean/> 元素的 autowire 属性为 bean 定义指定 autowire 模式
+  autowire的四种模式
+  `no` 该选项是`spring`框架的默认选项，表示自动装配为关闭状态`OFF`。我们必须在`bean`定义中使用`<property>`标签显式设置依赖项。
+
+  `byName` 此选项启用基于`bean`名称的依赖项注入。在`Bean`中自动装配属性时，属性名称用于在配置文件中搜索匹配的`Bean`定义。如果找到这样的`bean`，则将其注入属性。如果找不到这样的`bean`，则会引发错误。
+
+  `byType` 此选项支持基于`bean`类型的依赖项注入。在`bean`中自动装配属性时，属性的类类型用于在配置文件中搜索匹配的`bean`定义。如果找到这样的`bean`，就在属性中注入它。如果没有找到这样的`bean`，就会引发一个错误。
+
+  `constructor` 通过构造函数自动装配与`byType`相似，仅适用于构造函数参数。在启用了自动装配的`bean`中，它将查找构造函数参数的类类型，然后对所有构造函数参数执行自动装配类型。请注意，如果容器中没有一个完全属于构造函数参数类型的`bean`，则会引发致命错误。
+
+- 自动装配的缺点：
+
+  1. 在配置文件中配置的显示依赖项会重写自动装配时配置的依赖。
+  2. 自动装配不如直接的配置显示依赖精确
+  3. Spring容器可以生成依赖关系之间的文档，自动装配可能导致文档生成失败。
+  4. 容器中的多个 bean 定义可能与 setter 方法或要自动连接的构造函数参数指定的类型相匹配。对于数组、集合或 Map 实例，这不一定是问题。但是，对于期望单个值的依赖项，不能随意解决这种不确定性。如果没有唯一的 bean 定义可用，则引发异常。
+
+- 使某个bean无法自动装配
+
+  ```xml
+  <bean id="childProperties" parent="parentProperties" autowire-candidate="false">
+  </bean>
+  ```
+
+  设置bean的autowire-candidate属性为false，就会将该bean从自动装配的队列中排除出去。
+
+- 可以通过在<beans>顶层标签的default-autowire-candidates属性中，设置模式，来通过使用名称来模式匹配，限制哪些beans是无法被自动注入的。
+
+- 在大多数应用程序场景中，容器中的大多数 bean 都是单例的。当一个单例 bean 需要与另一个单例 bean 协作，或者一个非单例 bean 需要与另一个非单例 bean 协作时，通常通过将一个 bean 定义为另一个 bean 的属性来处理依赖关系。当 bean 的生命周期不同时，问题就出现了。假设单例 bean a 需要使用非单例bean b，也许在 a 上的每个方法调用上都需要。容器只创建单例 bean a 一次，因此只有一次机会设置属性。每次需要 bean b 的新实例时，容器不能为 bean a 提供 bean b 的新实例。
+  一种解决方案是：放弃一些控制反转，让bean A实现ApplicationContextAware 接口，每次在bean A需要其依赖的bean B时，通过调用一个方法，让容器创建一个bean B，给A使用。
+
+  ```java
+  public class CommandManager implements ApplicationContextAware {
+  	//在类中定义一个ApplicationContext的引用，用来保留实现方法中传递过来的applicationContext
+      private ApplicationContext applicationContext;
+  
+      public Object process(Map commandState) {
+          // grab a new instance of the appropriate Command
+          Command command = createCommand();
+          // set the state on the (hopefully brand new) Command instance
+          command.setState(commandState);
+          return command.execute();
+      }
+  
+      protected Command createCommand() {
+          // notice the Spring API dependency!
+          //使用applicationContext来获取该bean所依赖的bean对象
+          return this.applicationContext.getBean("command", Command.class);
+      }
+  	//实现接口中的方法
+      @Override
+      public void setApplicationContext(ApplicationContext applicationContext) throws BeansException {
+          this.applicationContext = applicationContext;
+      }
+  }
+  ```
+
+  但是这种方式是不可取的，因为Spring框架耦合到了业务中。更好的解决办法是使用方法注入。
+
+- LookUp查找方法注入
+
+  ```java
+  public abstract class CommandManager {
+  
+      public Object process(Object commandState) {
+          // grab a new instance of the appropriate Command interface
+          Command command = createCommand();
+          // set the state on the (hopefully brand new) Command instance
+          command.setState(commandState);
+          return command.execute();
+      }
+  
+      // okay... but where is the implementation of this method?
+      protected abstract Command createCommand();
+  }
+  ```
+
+  ```xml
+  <!-- a stateful bean deployed as a prototype (non-singleton) -->
+  <bean id="myCommand" class="fiona.apple.AsyncCommand" scope="prototype">
+      <!-- inject dependencies here as required -->
+  </bean>
+  
+  <!-- commandProcessor uses statefulCommandHelper -->
+  <bean id="commandManager" class="fiona.apple.CommandManager">
+      <lookup-method name="createCommand" bean="myCommand"/>
+  </bean>
+  ```
+
+  使用lookup来查找能够提供实例对象注入的方法。或者，也可以通过注解的方式。
+
+  ```java
+  public abstract class CommandManager {
+  
+      public Object process(Object commandState) {
+          Command command = createCommand();
+          command.setState(commandState);
+          return command.execute();
+      }
+  
+      @Lookup("myCommand")	//通过名字查找
+      protected abstract Command createCommand();
+  }
+  ```
+
+  ```java
+  public abstract class CommandManager {
+  
+      public Object process(Object commandState) {
+          MyCommand command = createCommand();
+          command.setState(commandState);
+          return command.execute();
+      }
+  
+      @Lookup	//通过类型查找
+      protected abstract MyCommand createCommand();
+  }
+  ```
+
+  
 
 
 
