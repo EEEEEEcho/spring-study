@@ -775,11 +775,245 @@
 
   
 
+### 1.5 Bean的作用域
 
+| Scope 范围                                                   | Description 描述                                             |
+| :----------------------------------------------------------- | :----------------------------------------------------------- |
+| [singleton](https://docs.spring.io/spring-framework/docs/5.2.9.RELEASE/spring-framework-reference/core.html#beans-factory-scopes-singleton) | (Default) Scopes a single bean definition to a single object instance for each Spring IoC container.(默认值)为每个 Spring IoC 容器将一个 bean 定义作用于一个对象实例。 |
+| [prototype](https://docs.spring.io/spring-framework/docs/5.2.9.RELEASE/spring-framework-reference/core.html#beans-factory-scopes-prototype) | Scopes a single bean definition to any number of object instances.将单个 bean 定义作用于任意数量的对象实例。 |
+| [request](https://docs.spring.io/spring-framework/docs/5.2.9.RELEASE/spring-framework-reference/core.html#beans-factory-scopes-request) | Scopes a single bean definition to the lifecycle of a single HTTP request. That is, each HTTP request has its own instance of a bean created off the back of a single bean definition. Only valid in the context of a web-aware Spring `ApplicationContext`.将单个 bean 定义作用于单个 HTTP 请求的生命周期。也就是说，每个 HTTP 请求都有自己的 bean 实例，这个 bean 是从单个 bean 定义后面创建的。仅在感知 web 的 Spring application 上下文中有效。 |
+| [session](https://docs.spring.io/spring-framework/docs/5.2.9.RELEASE/spring-framework-reference/core.html#beans-factory-scopes-session) | Scopes a single bean definition to the lifecycle of an HTTP `Session`. Only valid in the context of a web-aware Spring `ApplicationContext`.将单个 bean 定义作用于 HTTP 会话的生命周期。仅在感知 web 的 Spring application 上下文中有效。 |
+| [application](https://docs.spring.io/spring-framework/docs/5.2.9.RELEASE/spring-framework-reference/core.html#beans-factory-scopes-application) | Scopes a single bean definition to the lifecycle of a `ServletContext`. Only valid in the context of a web-aware Spring `ApplicationContext`.将单个 bean 定义作用于 ServletContext 的生命周期。仅在感知 web 的 Spring application 上下文中有效。 |
+| [websocket](https://docs.spring.io/spring-framework/docs/5.2.9.RELEASE/spring-framework-reference/web.html#websocket-stomp-websocket-scope) | Scopes a single bean definition to the lifecycle of a `WebSocket`. Only valid in the context of a web-aware Spring `ApplicationContext`.将一个 bean 定义作为 WebSocket 生命周期的范围。仅在感知 web 的 Spring application 上下文中有效。 |
 
+- 单例bean:当您定义一个 bean 定义并将其作用域定为单例时，Spring IoC 容器只创建由该 bean 定义定义的对象的一个实例。这个单独的实例存储在这样的单独 bean 的缓存中，并且对于这个命名 bean 的所有后续请求和引用都返回缓存的对象。下面的图片展示了单例模式的工作原理:
+  ![image-20220103150923553](note.assets/image-20220103150923553.png)
+  
+- Spring的单例bean不同于设计模式中定义的单例模式。设计模式种的单例模式意味着，整个ClassLoader中只存在一个单例实例，而Spring中的单例bean意味着一个Spring的容器中只存在一个单例Bean，两者的范围不同。
 
+- 原型范围：Bean 部署的非单例原型范围导致每次对特定 bean 发出请求时都会创建一个新的 bean 实例。也就是说，bean 被注入到另一个 bean 中，或者您通过容器上的 getBean ()方法调用请求它。通常，您应该为所有有状态 bean 使用原型范围，为无状态 bean 使用单例范围。
+  ![image-20220103151305402](note.assets/image-20220103151305402.png)
+  
+- Spring对于作用范围为prototype的bean只负责创建，并不负责清理，清理工作交给请求者，也即该bean 的使用者负责。
 
+- 当您使用单实例范围的 bean 与原型 bean 的依赖关系时，请注意依赖关系在实例化时被解析。因此，如果您依赖性地将原型范围的 bean 注入到单实例范围的 bean 中，那么就会实例化一个新的原型 bean，然后依赖性地注入到单实例 bean 中。原型实例是曾经提供给单一作用域 bean 的唯一实例。
+  但是，假设您希望**单实例范围的 bean 在运行时重复获取原型范围的 bean 的新实例**。不能依赖性地将原型范围的 bean 注入到单例 bean 中，因为注入只发生一次，即当 Spring 容器实例化单例 bean 并解析和注入它的依赖项时。如果在运行时多次需要原型 bean 的新实例，请参见方法注入
+  
+- request、session、application和 websocket 范围只有在使用感知 web 的 Spring ApplicationContext 实现(比如 XmlWebApplicationContext)时才可用。如果将这些作用域与常规 Spring IoC 容器(如 ClassPathXmlApplicationContext)一起使用，则会抛出一个非法 statexception，它会报告一个未知的 bean 作用域。
 
+- Spring IoC 容器不仅管理对象(bean)的实例化，还管理协作者(或依赖项)之间的连接。如果您想将(例如)一个 HTTP 请求范围的 bean 注入到另一个长寿命范围的 bean 中，您可以选择注入一个 AOP 代理来代替范围的 bean。也就是说，您需要注入一个代理对象，该代理对象公开与作用域对象相同的公共接口，但也可以从相关作用域中检索真正的目标对象(例如 HTTP 请求) ，并将委托方法调用引用到真正的对象上。
+
+- 不同作用域的对象之间的注入规则
+
+  ```xml
+  <bean id="userPreferences" class="com.something.UserPreferences" scope="session">
+      <aop:scoped-proxy/>
+  </bean>
+  
+  <bean id="userManager" class="com.something.UserManager">
+      <property name="userPreferences" ref="userPreferences"/>
+  </bean>
+  ```
+
+  上例中，userPreferences是一个会话级别的bean，而userManager的作用域为singleton,因此，由于userManager bean创建时，要依赖于userPreferences，但是由于作用域的原因，在容器创建userManager bean时，容器创建了一个对象，该对象公开了与 UserPreferences 类完全相同的公共接口(理想情况下是一个 UserPreferences 实例的对象) ，该对象可以从范围机制(HTTP request、 Session 等)中获取真正的 UserPreferences 对象。容器将这个代理对象注入到 userManager bean 中，而 UserPreferences 引用并不知道这是一个代理。在这个示例中，当 UserManager 实例调用依赖注入的 UserPreferences 对象上的方法时，它实际上是在调用代理上的方法。然后，代理从(在本例中) HTTP Session 获取真实的 UserPreferences 对象，并将方法调用委托给检索到的真实 UserPreferences 对象。
+
+- 默认情况下，当 Spring 容器为用 < aop: scoped-proxy/> 元素标记的 bean 创建代理时，将创建一个基于 cglib 的类代理。
+
+- <aop:scoped-proxy proxy-target-class="false"/> 当设置 proxy-target-class="false" 之后，将会为这种作用域bean创建标准的基于JDK接口的代理。
+
+- 通过实现Scope接口，可以自定义bean的作用范围
+
+  ```java
+  public interface Scope {
+      Object get(String var1, ObjectFactory<?> var2);
+  
+      @Nullable
+      Object remove(String var1);
+  
+      void registerDestructionCallback(String var1, Runnable var2);
+  
+      @Nullable
+      Object resolveContextualObject(String var1);
+  
+      @Nullable
+      String getConversationId();
+  }
+  ```
+
+### 1.6 定义bean的特征
+
+- 为了实现容器与bean生命周期的交互，可以实现Spring提供的InitializingBean和DisposableBean接口，前者提供了afterPropertiesSet()的回调函数，用来在bean初始化时进行操作，后者提供了destroy()回调函数，用来在销毁bean时执行某些操作。
+  不过，在现代实践中，JSR-250中定义的@PostConstruct 和@PreDestroy 注释通常被认为是在现代 Spring 应用程序中接收生命周期回调的最佳实践。被@PostConstruct标注的方法，会在bean创建之前执行，@PreDestroy会在销毁之前执行。
+
+- Spring会使用BeanPostProcessor接口的实现来正确进行回调函数的处理
+
+  ```java
+  public interface BeanPostProcessor {
+      @Nullable
+      default Object postProcessBeforeInitialization(Object bean, String beanName) throws BeansException {
+          return bean;
+      }
+  
+      @Nullable
+      default Object postProcessAfterInitialization(Object bean, String beanName) throws BeansException {
+          return bean;
+      }
+  }
+  ```
+
+  如果您需要自定义特性或其他 Spring 默认不提供的生命周期行为，您可以自己实现 BeanPostProcessor
+
+- org.springframework.beans.factory.InitializingBean接口中只有一个方法 
+
+  ```java
+  void afterPropertiesSet() throws Exception;
+  ```
+
+  允许 bean 在容器已经在 bean 上设置了所有必要的属性之后执行初始化工作
+
+- 建议不要使用 InitializingBean 接口，因为它不必要地将代码与 Spring 挂钩。
+  建议使用@PostConstruct 注释或指定 POJO 初始化方法。对于基于 xml 的配置元数据，可以使用 init-method 属性指定具有无效无参数签名的方法的名称。使用 Java 配置，您可以使用@Bean 的 initMethod 属性。
+
+  ```xml
+  <bean id="exampleInitBean" class="examples.ExampleBean" init-method="init"/>
+  ```
+
+  ```java
+  public class ExampleBean {
+  
+      public void init() {
+          // do some initialization work
+      }
+  }
+  ```
+
+  这种方式与下面不建议使用的方式完全相同。
+
+  ```xml
+  <bean id="exampleInitBean" class="examples.AnotherExampleBean"/>
+  ```
+
+  ```java
+  public class AnotherExampleBean implements InitializingBean {
+  
+      @Override
+      public void afterPropertiesSet() {
+          // do some initialization work
+      }
+  }
+  ```
+
+  这种方式将业务代码与Spring的代码耦合到了一起。
+
+- org.springframework.beans.factory.DisposableBean 接口允许bean在包含它的容器被销毁时执行destory()回调。
+
+  ```java
+  void destroy() throws Exception;
+  ```
+
+  同理，建议不要将其耦合到Spring框架中。
+
+- 推荐使用自定义初始化方法的方式初始化bean，假设类的定义如下
+
+  ```java
+  public class BlogService {
+      private BlogDao blogDao;
+  
+      public void setBlogDao(BlogDao blogDao) {
+          this.blogDao = blogDao;
+      }
+  
+      public void init(){
+          System.out.println("Blog Service init");
+      }
+  }
+  ```
+
+  ```java
+  public class BlogDao {
+      public void init(){
+          System.out.println("Hello world Blog Dao");
+      }
+  }
+  ```
+
+  xml定义如下
+
+  ```xml
+  <?xml version="1.0" encoding="UTF-8"?>
+  <beans xmlns="http://www.springframework.org/schema/beans"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://www.springframework.org/schema/beans
+          https://www.springframework.org/schema/beans/spring-beans.xsd"
+          default-init-method="init">
+      <bean id="blogDao" class="com.echo.chapter1.custombeannature.BlogDao"/>
+  
+      <bean id="blogService" class="com.echo.chapter1.custombeannature.BlogService">
+          <property name="blogDao" ref="blogDao"/>
+      </bean>
+  
+  </beans>
+  ```
+
+  注意，在<beans>标签中设置了default-init-method="init"属性。
+
+  main方法定义如下
+
+  ```java
+  public static void main(String[] args) {
+          ApplicationContext context = new ClassPathXmlApplicationContext("nature.xml");
+          BlogDao blogDao = context.getBean("blogDao", BlogDao.class);
+          //BlogService blogService = context.getBean("blogService", BlogService.class);
+  }
+  ```
+
+  注意，我这里在两个类中都定义了init()方法，然后容器在初始化时就会初始化作用域为singleton的bean，所以，我在进行完容器的初始化之后，这两个init()方法都会被调用。
+
+  ```bash
+  Hello world Blog Dao
+  Blog Service init
+  ```
+
+  如果将其中一个bean设置为延迟加载
+
+  ```xml
+  <bean id="blogDao" class="com.echo.chapter1.custombeannature.BlogDao"/>
+  
+  <bean id="blogService" class="com.echo.chapter1.custombeannature.BlogService" lazy-init="true">
+      <property name="blogDao" ref="blogDao"/>
+  </bean>
+  ```
+
+  那么，它的init()方法在容器创建完成之后，并不会执行。
+
+  ```java
+  public static void main(String[] args) {
+      ApplicationContext context = new ClassPathXmlApplicationContext("nature.xml");
+      BlogDao blogDao = context.getBean("blogDao", BlogDao.class);
+      //BlogService blogService = context.getBean("blogService", BlogService.class);
+  }
+  ```
+
+  ```bash
+  Hello world Blog Dao
+  ```
+
+  同理，bean的销毁回调方法也一样，设置default-destroy-method即可。
+
+- Spring 容器保证在提供所有依赖项的 bean 之后立即调用已配置的初始化回调
+
+- 在 Spring 2.5中，控制 bean 生命周期行为有三个选项
+
+  - 实现InitializingBean和DisposableBean接口，并实现接口中定义的函数
+  - 自定义init()和destory()方法并在<beans>元素中配置
+  - 使用@PostConstruct和@PreDestory注解来标注方法
+
+  如果为一个bean配置了多个上述生命周期机制，且每个机制的方法名都不同，那么每个配置的方法将按照后续列出的顺序执行。但是如果只配置了相同的方法名，那么该方法只会运行一次。
+  初始化时的执行顺序：
+  ![image-20220105110410157](note.assets/image-20220105110410157.png)
+
+  销毁时的执行顺序：
+  ![image-20220105110530365](note.assets/image-20220105110530365.png)
 
 
 
