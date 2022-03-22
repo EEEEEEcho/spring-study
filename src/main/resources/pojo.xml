@@ -19,6 +19,11 @@
 
     </bean>
 
+    <bean id="person" class="com.echo.enjoy.chapter1.pojo.Person">
+        <property name="name" value="echo"/>
+        <property name="age" value="18" />
+    </bean>
+
     <!--  实例工厂创建bean  -->
 <!--    <bean id="objectFactory" class="com.echo.chapter1.beanoverview.ObjectFactory" />-->
 <!--    <bean id="student" factory-bean="objectFactory" factory-method="getStudent" />-->
