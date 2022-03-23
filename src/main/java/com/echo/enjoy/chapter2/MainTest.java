@@ -26,4 +26,13 @@ public class MainTest {
             System.out.println(name);
         }
     }
+
+    @Test
+    public void test03(){
+        ApplicationContext context = new AnnotationConfigApplicationContext(MainConfig2.class);
+        System.out.println("容器初始化完成");
+//        Object bean = context.getBean("echoFactoryBean");
+        Object bean = context.getBean("&echoFactoryBean");
+        System.out.println(bean);
+    }
 }

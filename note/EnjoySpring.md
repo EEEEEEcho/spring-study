@@ -153,6 +153,16 @@ public class MyTypeFilter implements TypeFilter {
 }
 ```
 
+```java
+@ComponentScan(
+        value = "com.echo.enjoy.chapter1",
+        includeFilters = {
+                @ComponentScan.Filter(type = FilterType.CUSTOM, classes = {MyTypeFilter.class})
+        },
+        useDefaultFilters = false
+)
+```
+
 运行测试
 
 ```java
@@ -231,7 +241,7 @@ orderService
 
 Spring中的bean默认是单例的
 
-作用域为Singleton(单例)时：对象会随着容器的创建而创建。以后每次获取都是从容器中拿(Map)的同一个bean
+作用域为Singleton(单例)时：**对象会随着容器的创建而创建**。以后每次获取都是从容器中拿(Map)的同一个bean
 
 ```java
 @Bean
@@ -255,7 +265,7 @@ public void test02(){
 true
 ```
 
-作用域为Prototype(多实例)时：对象是懒加载的，只有在需要对象时，才会进行对象的创建
+作用域为Prototype(多实例)时：**对象是懒加载的**，只有在需要对象时，才会进行对象的创建
 
 ```java
 @Bean
@@ -447,7 +457,7 @@ public void test01(){
      * IOC容器中使用时，需要使用该注解
      * 2.包扫描(@ComponentScan) + 组件的标注注解(@Controller,@Service,@Repository,@Component)
      * 一般是针对我们自己写的类，
-     * 3.@Import:能够快速给容器导入一个Bean，注意@Bean注册的方式过于简单
+     * 3.@Import:能够快速给容器导入一个Bean，
      *    3.1 @Import(value = {Dog.class, Cat.class})value中的值是要注入到容器中的bean的class，bean的ID为类的全限定类名
      *    3.2 ImportSelector:是一个接口，返回需要导入到容器的组件的全类名数组
      *    3.3 ImportBeanDefinitionRegister: 可以手动添加组件到IOC容器，所有Bean的注册可以使用BeanDefinitionRegistry
@@ -521,6 +531,10 @@ public class EchoImportSelector implements ImportSelector {
         return new String[]{"com.echo.enjoy.chapter2.pojo.Fish","com.echo.enjoy.chapter2.pojo.Cow"};
     }
 }
+```
+
+```java
+@Import(value = {Dog.class, Cat.class,EchoImportSelector.class})
 ```
 
 测试
@@ -629,5 +643,493 @@ robot		//注入的
 car			//注入的
 ```
 
-### todo//
+#### 使用FacotryBean注入
+
+```java
+public class SpiderMan {
+}
+```
+
+```java
+public class EchoFactoryBean implements FactoryBean<SpiderMan> {
+    @Override
+    public SpiderMan getObject() throws Exception {
+        return new SpiderMan();
+    }
+
+    @Override
+    public Class<?> getObjectType() {
+        return SpiderMan.class;
+    }
+
+    @Override
+    public boolean isSingleton() {
+        return FactoryBean.super.isSingleton();
+    }
+}
+```
+
+```java
+@Configuration
+@Import(value = {Dog.class, Cat.class,EchoImportSelector.class,EchoBeanDefinitionRegister.class})
+public class MainConfig2 {
+
+    //将自定义的工厂注入到容器中，然后容器会解析这个FactoryBean中对bean的定义，将FactoryBean中定义的bean注入到容器中
+    @Bean
+    public EchoFactoryBean echoFactoryBean(){
+        return new EchoFactoryBean();
+    }
+}
+```
+
+```java
+@Test
+public void test03(){
+    ApplicationContext context = new AnnotationConfigApplicationContext(MainConfig2.class);
+    System.out.println("容器初始化完成");
+    Object bean = context.getBean("echoFactoryBean");
+    System.out.println(bean);
+}
+```
+
+接下来会出现一个比较诡异的结果，我们将这个FactoryBean也注入到了容器中，这个FactoryBean会将在其中定义的SpiderMan注入到容器中，但是如果我们以context.getBean("echoFactoryBean")的方式来获取bean的话，获取的并不是这个FactoryBean而是它注入的SpiderMan的bean;这可以通过跟源码来发现。
+
+```bash
+com.echo.enjoy.chapter2.pojo.SpiderMan@126253fd
+```
+
+但是如果以这样的方式
+
+```java
+@Test
+public void test03(){
+    ApplicationContext context = new AnnotationConfigApplicationContext(MainConfig2.class);
+    System.out.println("容器初始化完成");
+    //        Object bean = context.getBean("echoFactoryBean");
+    Object bean = context.getBean("&echoFactoryBean");	//加一个&
+    System.out.println(bean);
+}
+```
+
+那么就会正常拿到echoBeanFactoryBean
+
+```bash
+com.echo.enjoy.chapter2.config.EchoFactoryBean@126253fd
+```
+
+### Spring(三) bean的生命周期
+
+先看一个简单的例子
+
+#### 1.最朴素的生命周期(定义了init和destroy方法)
+
+![image-20220323153433660](EnjoySpring.assets/image-20220323153433660.png)
+
+**单实例**
+
+```java
+public class Bike {
+    public Bike(){
+        System.out.println("Bike constructor...");
+    }
+    public void init(){
+        System.out.println("Bike init....");
+    }
+    public void destroy(){
+        System.out.println("Bike destroy....");
+    }
+}
+```
+
+```java
+@Bean(initMethod = "init",destroyMethod = "destroy")
+public Bike bike(){
+    return new Bike();
+}
+```
+
+```java
+@Test
+public void test01(){
+    AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext(MainConfig1.class);
+    System.out.println("IOC容器创建完成");
+    //关掉容器
+    context.close();
+    System.out.println("IOC容器被关闭");
+}
+```
+
+```java
+Bike constructor...
+Bike init....
+IOC容器创建完成
+Bike destroy....
+IOC容器被关闭
+```
+
+对于Singleton的bean可以正常调用初始化和销毁的方法
+
+
+
+*扩展*
+
+*IOC容器关闭，调用close方法时*
+
+```java
+// Destroy all cached singletons in the context's BeanFactory.
+destroyBeans();
+
+// Close the state of this context itself.
+closeBeanFactory();
+
+// Let subclasses do some final clean-up if they wish...
+onClose();
+
+```
+
+*调用destroyBeans()*
+
+```java
+this.containedBeanMap.clear();		//把装bean的map清空
+this.dependentBeanMap.clear();
+this.dependenciesForBeanMap.clear();
+```
+
+*增强bean的核心代码*
+
+```java
+Object wrappedBean = bean;
+//BeanPostProcessorsBeforeInitialization
+if (mbd == null || !mbd.isSynthetic()) {
+    wrappedBean = applyBeanPostProcessorsBeforeInitialization(wrappedBean, beanName);
+}
+//init
+try {
+    //@Bean(initMethod="init") 增强的是init方法？
+    invokeInitMethods(beanName, wrappedBean, mbd);
+}
+catch (Throwable ex) {
+    throw new BeanCreationException(
+        (mbd != null ? mbd.getResourceDescription() : null),
+        beanName, "Invocation of init method failed", ex);
+}
+//BeanPostProcessorsAfterInitialization
+if (mbd == null || !mbd.isSynthetic()) {
+    wrappedBean = applyBeanPostProcessorsAfterInitialization(wrappedBean, beanName);
+}
+
+return wrappedBean;
+```
+
+**多实例**
+
+对于多实例的bean，容器只负责初始化，但不会管理bean，容器关闭时不会调用销毁方法.
+
+```java
+@Scope("prototype")
+@Bean(initMethod = "init",destroyMethod = "destroy")
+public Bike bike(){
+	return new Bike();
+}
+```
+
+```bash
+IOC容器创建完成
+IOC容器被关闭
+```
+
+#### InitializingBean接口和DisposableBean接口
+
+![image-20220323154230696](EnjoySpring.assets/image-20220323154230696.png)
+
+```java
+public interface InitializingBean {
+
+	/**
+	 * Invoked by the containing {@code BeanFactory} after it has set all bean properties
+	 * and satisfied {@link BeanFactoryAware}, {@code ApplicationContextAware} etc.
+	 * <p>This method allows the bean instance to perform validation of its overall
+	 * configuration and final initialization when all bean properties have been set.
+	 * @throws Exception in the event of misconfiguration (such as failure to set an
+	 * essential property) or if initialization fails for any other reason
+	 */
+    //bean的属性设值之后调用
+	void afterPropertiesSet() throws Exception;
+
+}
+```
+
+```java
+public interface DisposableBean {
+
+	/**
+	 * Invoked by the containing {@code BeanFactory} on destruction of a bean.
+	 * @throws Exception in case of shutdown errors. Exceptions will get logged
+	 * but not rethrown to allow other beans to release their resources as well.
+	 */
+    //在bean销毁时，由BeanFactory调用此方法
+	void destroy() throws Exception;
+
+}
+```
+
+定义一个pojo
+
+```java
+@Component
+public class Train implements InitializingBean, DisposableBean {
+    public Train(){
+        System.out.println("Train constructor...");
+    }
+
+    @Override
+    //在bean销毁时，调用此方法
+    public void destroy() throws Exception {
+        System.out.println("Train DisposableBean destroy()...");
+    }
+
+    @Override
+    //bean的属性设值,初始化完成之后调用
+    public void afterPropertiesSet() throws Exception {
+        System.out.println("Train InitializingBean afterPropertiesSet()...");
+    }
+}
+```
+
+```java
+@Test
+public void test02(){
+    AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext(MainConfig1.class);
+    System.out.println("IOC容器创建完成");
+    //关掉容器
+    context.close();
+    System.out.println("IOC容器被关闭");
+}
+```
+
+```bash
+Train constructor...
+Train InitializingBean afterPropertiesSet()...
+IOC容器创建完成
+Train DisposableBean destroy()...
+IOC容器被关闭
+```
+
+#### @PostConstruct注解和@PreDestroy注解
+
+![image-20220323155124249](EnjoySpring.assets/image-20220323155124249.png)
+
+```java
+@Component
+public class Jeep {
+    public Jeep(){
+        System.out.println("Jeep Constructor ......");
+    }
+    @PostConstruct
+    public void doInit(){
+        System.out.println("Jeep doInit() ......");
+    }
+    @PreDestroy
+    public void doDestroy(){
+        System.out.println("Jeep doDestroy() ......");
+    }
+}
+```
+
+```java
+@Test
+public void test02(){
+    AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext(MainConfig1.class);
+    System.out.println("IOC容器创建完成");
+    //关掉容器
+    context.close();
+    System.out.println("IOC容器被关闭");
+}
+```
+
+```bash
+Jeep Constructor ......
+Jeep doInit() ......
+IOC容器创建完成
+Jeep doDestroy() ......
+IOC容器被关闭
+```
+
+#### BeanPostProcessor
+
+![image-20220323160341144](EnjoySpring.assets/image-20220323160341144.png)
+
+```java
+@Component
+public class EkkoBeanPostProcessor implements BeanPostProcessor {
+    @Override
+    public Object postProcessBeforeInitialization(Object bean, String beanName) throws BeansException {
+        //return BeanPostProcessor.super.postProcessBeforeInitialization(bean, beanName);
+        System.out.println("EkkoBeanPostProcessor postProcessBeforeInitialization() 处理了" + beanName);
+        return bean;
+    }
+
+    @Override
+    public Object postProcessAfterInitialization(Object bean, String beanName) throws BeansException {
+        //return BeanPostProcessor.super.postProcessAfterInitialization(bean, beanName);
+        System.out.println("EkkoBeanPostProcessor postProcessAfterInitialization() 处理了" + beanName);
+        return bean;
+    }
+}
+```
+
+```java
+@Test
+public void test02(){
+    AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext(MainConfig1.class);
+    System.out.println("IOC容器创建完成");
+    //关掉容器
+    context.close();
+    System.out.println("IOC容器被关闭");
+}
+```
+
+```bash
+EkkoBeanPostProcessor postProcessBeforeInitialization() 处理了mainConfig1
+EkkoBeanPostProcessor postProcessAfterInitialization() 处理了mainConfig1
+Jeep Constructor ......
+EkkoBeanPostProcessor postProcessBeforeInitialization() 处理了jeep
+Jeep doInit() ......
+EkkoBeanPostProcessor postProcessAfterInitialization() 处理了jeep
+IOC容器创建完成
+Jeep doDestroy() ......
+IOC容器被关闭
+```
+
+#### 一个整体的生命周期流程
+
+```java
+public class Loser implements InitializingBean, DisposableBean {
+    public static int count = 0;
+    private String name;
+    public Loser(String name){
+        count++;
+        System.out.println("这是构造方法: " + " count 的值为: " + count);
+        this.name = name;
+    }
+
+    public void setName(String name) {
+        this.name = name;
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public void customInit(){
+        count++;
+        System.out.println("这是我自定义的init方法,在该方法里的name属性值为： " + this.name + " count 的值为: " + count);
+    }
+
+    public void customDestroy(){
+        count++;
+        System.out.println("这是我自定义的destroy方法,在该方法里的name属性值为：  " + this.name + " count 的值为: " + count);
+
+    }
+
+    @Override
+    public void destroy() throws Exception {
+        count++;
+        System.out.println("这是DisposableBean的destroy方法,在该方法里的name属性值为：  " + this.name + " count 的值为: " + count);
+    }
+
+    @Override
+    public void afterPropertiesSet() throws Exception {
+        count++;
+        System.out.println("这是InitializingBean的afterPropertiesSet方法,在该方法里的name属性值为： " + this.name  + " count 的值为: " + count);
+    }
+
+    @PostConstruct
+    public void customPostConstruct(){
+        count++;
+        System.out.println("这是我自定义的由@PostConstruct标记的方法,在该方法里的name属性值为：  " + this.name  + " count 的值为: " + count);
+    }
+
+    @PreDestroy
+    public void customPreDestroy(){
+        count++;
+        System.out.println("这是我自定义的由@PreDestroy标记的方法,在该方法里的name属性值为：  " + this.name  + " count 的值为: " + count);
+    }
+}
+
+```
+
+```java
+@Component
+public class EkkoBeanPostProcessor implements BeanPostProcessor {
+    @Override
+    public Object postProcessBeforeInitialization(Object bean, String beanName) throws BeansException {
+        //return BeanPostProcessor.super.postProcessBeforeInitialization(bean, beanName);
+        if (beanName.equals("loser")){
+            Loser loser = (Loser) bean;
+            Loser.count ++;
+            System.out.println("EkkoBeanPostProcessor postProcessBeforeInitialization() 处理了 " + beanName  +
+                     " name属性值为：" + loser.getName() + " count 的值为: " + Loser.count);
+        }
+        return bean;
+    }
+
+    @Override
+    public Object postProcessAfterInitialization(Object bean, String beanName) throws BeansException {
+        //return BeanPostProcessor.super.postProcessAfterInitialization(bean, beanName);
+        if (beanName.equals("loser")){
+            Loser loser = (Loser) bean;
+            Loser.count ++;
+            System.out.println("EkkoBeanPostProcessor postProcessAfterInitialization() 处理了 " + beanName  +
+                    " name属性值为：" + loser.getName() + " count 的值为: " + Loser.count);
+        }
+        return bean;
+    }
+}
+
+```
+
+```java
+@Configuration
+public class MainConfig1 {
+    @Bean
+    public EkkoBeanPostProcessor ekkoBeanPostProcessor(){
+        return new EkkoBeanPostProcessor();
+    }
+
+    @Bean(initMethod = "customInit",destroyMethod = "customDestroy")
+    public Loser loser(){
+        return new Loser("Ekko");
+    }
+}
+```
+
+```java
+@Test
+public void test02(){
+    AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext(MainConfig1.class);
+    System.out.println("IOC容器创建完成");
+    //关掉容器
+    context.close();
+    System.out.println("IOC容器被关闭");
+}
+```
+
+```bash
+这是构造方法:  count 的值为: 1
+EkkoBeanPostProcessor postProcessBeforeInitialization() 处理了 loser name属性值为：Ekko count 的值为: 2
+这是我自定义的由@PostConstruct标记的方法,在该方法里的name属性值为：  Ekko count 的值为: 3
+这是InitializingBean的afterPropertiesSet方法,在该方法里的name属性值为： Ekko count 的值为: 4
+这是我自定义的init方法,在该方法里的name属性值为： Ekko count 的值为: 5
+EkkoBeanPostProcessor postProcessAfterInitialization() 处理了 loser name属性值为：Ekko count 的值为: 6
+IOC容器创建完成
+这是我自定义的由@PreDestroy标记的方法,在该方法里的name属性值为：  Ekko count 的值为: 7
+这是DisposableBean的destroy方法,在该方法里的name属性值为：  Ekko count 的值为: 8
+这是我自定义的destroy方法,在该方法里的name属性值为：  Ekko count 的值为: 9
+IOC容器被关闭
+```
+
+与经典流程图一样
+
+![v2-baaf7d50702f6d0935820b9415ff364c_r](EnjoySpring.assets/v2-baaf7d50702f6d0935820b9415ff364c_r.jpg)
 
