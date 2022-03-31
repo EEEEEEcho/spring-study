@@ -1,4 +1,4 @@
-### Spring(一)
+Spring(一)
 
 #### Spring体系结构
 
@@ -1133,3 +1133,994 @@ IOC容器被关闭
 
 ![v2-baaf7d50702f6d0935820b9415ff364c_r](EnjoySpring.assets/v2-baaf7d50702f6d0935820b9415ff364c_r.jpg)
 
+### Spring(四) BeanPostProcessor
+
+#### 引子
+
+@Autowired注解的实现其实就是一个BeanPostProcessor.
+
+```java
+public class AutowiredAnnotationBeanPostProcessor extends InstantiationAwareBeanPostProcessorAdapter
+		implements MergedBeanDefinitionPostProcessor, PriorityOrdered, BeanFactoryAware {
+}
+```
+
+![image-20220324164949644](EnjoySpring.assets/image-20220324164949644.png)
+
+其实这些BeanPostProcessor也是一种注入到容器中的bean，只不过它们用来管理和控制我们创建的业务bean。
+
+
+
+将bean交给processor处理的核心方法其实是：**applyBeanPostProcessorsBeforeInitialization()**
+
+```java
+wrappedBean = applyBeanPostProcessorsBeforeInitialization(wrappedBean, beanName);
+```
+
+Spring在该方法中的逻辑是在完成bean的创建和属性赋值之后，依次遍历所有的BeanPostProcessor然后进行相应的逻辑处理
+
+```java
+@Override
+public Object applyBeanPostProcessorsBeforeInitialization(Object existingBean, String beanName)
+    throws BeansException {
+	//将当前的bean赋值给result
+    Object result = existingBean;
+    //遍历所有的Spring内置的和我们自定义的BeanPostProcessor
+    for (BeanPostProcessor processor : getBeanPostProcessors()) {
+        //如果bean需要当前的processor处理，那么使用当前processor对该bean进行处理。
+        //例如，如果当前bean有@Autowire注解，在AutowiredAnnotationBeanPostProcessor被遍历到的时候，使用AutowiredAnnotationBeanPostProcessor进行处理。
+        Object current = processor.postProcessBeforeInitialization(result, beanName);
+        if (current == null) {
+            return result;
+        }
+        result = current;
+    }
+    return result;
+}
+```
+
+#### 一个@Async的例子
+
+```java
+@Async	//这个注解并不是SpringBoot中的注解，而是Spring的原生注解!!
+public void methodA() throws Exception {
+    System.out.println("methodA()...");
+}
+```
+
+使用该注解之后，该方法会被AsyncAnnotationBeanPostProcessor进行拦截，然后开线程对方法进行执行。
+
+```java
+public class AsyncAnnotationBeanPostProcessor extends AbstractBeanFactoryAwareAdvisingPostProcessor {
+
+	/**
+	 * The default name of the {@link TaskExecutor} bean to pick up: "taskExecutor".
+	 * <p>Note that the initial lookup happens by type; this is just the fallback
+	 * in case of multiple executor beans found in the context.
+	 * @since 4.2
+	 * @see AnnotationAsyncExecutionInterceptor#DEFAULT_TASK_EXECUTOR_BEAN_NAME
+	 */
+	public static final String DEFAULT_TASK_EXECUTOR_BEAN_NAME =
+			AnnotationAsyncExecutionInterceptor.DEFAULT_TASK_EXECUTOR_BEAN_NAME;
+
+
+	protected final Log logger = LogFactory.getLog(getClass());
+
+	@Nullable
+	private Supplier<Executor> executor;
+
+	@Nullable
+	private Supplier<AsyncUncaughtExceptionHandler> exceptionHandler;
+
+	@Nullable
+	private Class<? extends Annotation> asyncAnnotationType;
+
+
+
+	public AsyncAnnotationBeanPostProcessor() {
+		setBeforeExistingAdvisors(true);
+	}
+
+
+	/**
+	 * Configure this post-processor with the given executor and exception handler suppliers,
+	 * applying the corresponding default if a supplier is not resolvable.
+	 * @since 5.1
+	 */
+	public void configure(
+			@Nullable Supplier<Executor> executor, @Nullable Supplier<AsyncUncaughtExceptionHandler> exceptionHandler) {
+
+		this.executor = executor;
+		this.exceptionHandler = exceptionHandler;
+	}
+
+	/**
+	 * Set the {@link Executor} to use when invoking methods asynchronously.
+	 * <p>If not specified, default executor resolution will apply: searching for a
+	 * unique {@link TaskExecutor} bean in the context, or for an {@link Executor}
+	 * bean named "taskExecutor" otherwise. If neither of the two is resolvable,
+	 * a local default executor will be created within the interceptor.
+	 * @see AnnotationAsyncExecutionInterceptor#getDefaultExecutor(BeanFactory)
+	 * @see #DEFAULT_TASK_EXECUTOR_BEAN_NAME
+	 */
+	public void setExecutor(Executor executor) {
+		this.executor = SingletonSupplier.of(executor);
+	}
+
+	/**
+	 * Set the {@link AsyncUncaughtExceptionHandler} to use to handle uncaught
+	 * exceptions thrown by asynchronous method executions.
+	 * @since 4.1
+	 */
+	public void setExceptionHandler(AsyncUncaughtExceptionHandler exceptionHandler) {
+		this.exceptionHandler = SingletonSupplier.of(exceptionHandler);
+	}
+
+	/**
+	 * Set the 'async' annotation type to be detected at either class or method
+	 * level. By default, both the {@link Async} annotation and the EJB 3.1
+	 * {@code javax.ejb.Asynchronous} annotation will be detected.
+	 * <p>This setter property exists so that developers can provide their own
+	 * (non-Spring-specific) annotation type to indicate that a method (or all
+	 * methods of a given class) should be invoked asynchronously.
+	 * @param asyncAnnotationType the desired annotation type
+	 */
+	public void setAsyncAnnotationType(Class<? extends Annotation> asyncAnnotationType) {
+		Assert.notNull(asyncAnnotationType, "'asyncAnnotationType' must not be null");
+		this.asyncAnnotationType = asyncAnnotationType;
+	}
+
+
+	@Override
+	public void setBeanFactory(BeanFactory beanFactory) {
+		super.setBeanFactory(beanFactory);
+
+		AsyncAnnotationAdvisor advisor = new AsyncAnnotationAdvisor(this.executor, this.exceptionHandler);
+		if (this.asyncAnnotationType != null) {
+			advisor.setAsyncAnnotationType(this.asyncAnnotationType);
+		}
+		advisor.setBeanFactory(beanFactory);
+		this.advisor = advisor;
+	}
+
+}
+```
+
+#### Aware
+
+```java
+public class Hero implements ApplicationContextAware {
+
+    @Override
+    public void setApplicationContext(ApplicationContext applicationContext) throws BeansException {
+        System.out.println("感知到了容器:" + applicationContext);
+    }
+}
+```
+
+```java
+@Configuration
+public class MainConfig1 {
+    @Bean
+    public Hero hero(){
+        return new Hero();
+    }
+}
+```
+
+```java
+@Test
+public void test01(){
+    AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext(MainConfig1.class);
+    context.close();
+}
+```
+
+```bash
+感知到了容器:org.springframework.context.annotation.AnnotationConfigApplicationContext@69b794e2, started on Thu Mar 24 17:28:01 CST 2022
+```
+
+其实，处理实现的感知接口，也是由Spring的一个BeanPostProcessor来实现的。
+
+
+
+Spring底层对BeanPostProcessor的使用，包括bean的赋值，注入其他组件，生命周期注解功能
+
+#### @Value注解
+
+使用@Value进行初始化赋值，赋值的类型包括：1.基本字符串，2.SpringEL表达式 3.读取配置文件
+
+```java
+public class Bird {
+    //使用@Value进行初始化赋值，赋值的类型包括：1.基本字符串，2.SpringEL表达式 3.读取配置文件
+    @Value("James")
+    private String name;
+    @Value("#{20-2}")   //SpringEL表达式
+    private Integer age;
+    @Value("${bird.color}")
+    private String color;
+
+
+    public Bird(){
+
+    }
+
+    public Bird(String name, Integer age,String color) {
+        this.name = name;
+        this.age = age;
+        this.color = color;
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public void setName(String name) {
+        this.name = name;
+    }
+
+    public Integer getAge() {
+        return age;
+    }
+
+    public void setAge(Integer age) {
+        this.age = age;
+    }
+
+    public String getColor() {
+        return color;
+    }
+
+    public void setColor(String color) {
+        this.color = color;
+    }
+
+    @Override
+    public String toString() {
+        return "Bird{" +
+                "name='" + name + '\'' +
+                ", age=" + age +
+                ", color='" + color + '\'' +
+                '}';
+    }
+}
+```
+
+```java
+@Configuration
+//当容器启动时，会将这个配置加载到Environment中
+@PropertySource(value = "classpath:/application.properties")
+public class MainConfig1 {
+    @Bean
+    public Hero hero(){
+        return new Hero();
+    }
+
+    @Bean
+    public Bird bird(){
+        return new Bird();
+    }
+}
+```
+
+```java
+@Test
+public void test01(){
+    AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext(MainConfig1.class);
+    //从容器中获取所有bean
+    String[] beanDefinitionNames = context.getBeanDefinitionNames();
+    for (String name: beanDefinitionNames){
+        System.out.println(name);
+    }
+    //验证是否将bird.color属性加载到了环境变量中
+    ConfigurableEnvironment environment = context.getEnvironment();
+    System.out.println("environment : " + environment.getProperty("bird.color"));
+
+    Bird bird = context.getBean("bird", Bird.class);
+    System.out.println(bird);
+    context.close();
+}
+```
+
+```bash
+感知到了容器:org.springframework.context.annotation.AnnotationConfigApplicationContext@69b794e2, started on Thu Mar 24 22:18:12 CST 2022
+org.springframework.context.annotation.internalConfigurationAnnotationProcessor
+org.springframework.context.annotation.internalAutowiredAnnotationProcessor
+org.springframework.context.annotation.internalCommonAnnotationProcessor
+org.springframework.context.event.internalEventListenerProcessor
+org.springframework.context.event.internalEventListenerFactory
+mainConfig1
+hero
+bird
+environment : red
+Bird{name='James', age=18, color='red'}
+```
+
+#### @Autowired
+
+DAO
+
+```java
+@Repository
+public class TestDao {
+}
+```
+
+Service
+
+```java
+@Service
+public class TestService {
+    @Autowired
+    private TestDao testDao;
+
+    public void printDao(){
+        System.out.println(testDao);
+    }
+}
+```
+
+Controller
+
+```java
+@Controller
+public class TestController {
+    @Autowired
+    private TestService testService;
+}
+```
+
+```java
+@Configuration
+@ComponentScan(value =
+        {"com.echo.enjoy.chapter4.controller",
+        "com.echo.enjoy.chapter4.service",
+        "com.echo.enjoy.chapter4.dao"}
+)
+public class MainConfig1 {
+}
+
+```
+
+
+
+```java
+@Test
+public void test02(){
+    AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext(MainConfig1.class);
+    //        String[] beanDefinitionNames = context.getBeanDefinitionNames();
+    //        Arrays.stream(beanDefinitionNames).forEach(System.out::println);
+    TestService testService = context.getBean("testService", TestService.class);
+    TestDao testDao = context.getBean("testDao", TestDao.class);
+    //测试容器中的TestDao和注入到TestService中TestDao是否相同
+    testService.printDao();
+    System.out.println(testDao);
+    context.close();
+}
+```
+
+```bash
+com.echo.enjoy.chapter4.dao.TestDao@6e2aa843
+com.echo.enjoy.chapter4.dao.TestDao@6e2aa843
+```
+
+可以看到使用@AutoWired注入的bean和直接注入到容器中的bean是一个。
+
+**补充**
+
+```java
+@Autowired
+private UserDao userDao;
+```
+
+使用上述方式，Spring在注入时，会先根据bean的名称，这里是userDao去容器中寻找，如果找到名称为userDao的bean则直接注入。如果找不到bean名称味userDao的bean，则会按照类型，去容器中寻找是否有com.echo.xxyy.dao.UserDao类型的bean，如果有的话，直接进行注入。
+
+
+
+@Autowired可以加在很多地方
+
+```java
+@Component
+public class Sun{
+    private Moon moon;
+    
+    @Autowired	//在设置属性的方法上添加
+    public void setMoon(Moon moon){
+        this.moon = moon;
+    }
+    
+    public Moon getMoon(){
+        return this.moon;
+    }
+}
+```
+
+```java
+@Component
+public class Sun{
+    private Moon moon;
+    
+    @Autowired	//在构造方法上添加
+    public Sun(Moon moon){
+        this.moon = moon;
+    }
+    
+    public void setMoon(Moon moon){
+        this.moon = moon;
+    }
+    
+    public Moon getMoon(){
+        return this.moon;
+    }
+}
+```
+
+```java
+@Component
+public class Sun{
+    private Moon moon;
+    
+    //在参数上添加
+    public Sun(@Autowired Moon moon){
+        this.moon = moon;
+    }
+    
+    public void setMoon(Moon moon){
+        this.moon = moon;
+    }
+    
+    public Moon getMoon(){
+        return this.moon;
+    }
+}
+```
+
+
+
+#### @Qualifier
+
+如果向容器中注入两次相同的beanid的bean。那么只会存在一个，毕竟容器是个字典，而且优先级是@Bean高于@Autowired
+
+```java
+@Service
+public class TestService {
+    @Autowired  //通过包扫面和@Autowired注入了一次
+    private TestDao testDao;
+
+    public void printDao(){
+        System.out.println(testDao);
+    }
+}
+```
+
+在配置中又注入一次
+
+```java
+@Bean("testDao")
+public TestDao testDao(){
+    return new TestDao();
+}
+```
+
+最后容器中只有一份
+
+```java
+@Test
+public void test02(){
+    AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext(MainConfig1.class);
+    String[] beanDefinitionNames = context.getBeanDefinitionNames();
+    Arrays.stream(beanDefinitionNames).forEach(System.out::println);
+
+    TestService testService = context.getBean("testService", TestService.class);
+    testService.printDao();
+    TestDao testDao = context.getBean("testDao", TestDao.class);
+    System.out.println(testDao);
+    //        context.close();
+}
+```
+
+```bash
+org.springframework.context.annotation.internalConfigurationAnnotationProcessor
+org.springframework.context.annotation.internalAutowiredAnnotationProcessor
+org.springframework.context.annotation.internalCommonAnnotationProcessor
+org.springframework.context.event.internalEventListenerProcessor
+org.springframework.context.event.internalEventListenerFactory
+mainConfig1
+testController
+testService
+testDao
+com.echo.enjoy.chapter4.dao.TestDao@5852c06f
+com.echo.enjoy.chapter4.dao.TestDao@5852c06f
+```
+
+但是如果有不同的beanid的相同的bean注入，比如：
+
+```java
+@Bean("testDao2")
+public TestDao testDao(){
+    return new TestDao();
+}
+```
+
+使用@Autowired注入时，注入的是testDao。这里又注入了一个testDao2。所以，使用时可以使用@Qualifier来进行指定bean的注入
+
+```java
+@Autowired
+@Qualifier("testDao2")
+private TestDao testDao;
+```
+
+#### @Primary
+
+看这种情况
+
+```java
+public interface UserDao {
+    void printUrl();
+}
+```
+
+```java
+public class UserDaoImpl1 implements UserDao{
+    private String url = "1";
+
+    @Override
+    public void printUrl() {
+        System.out.println(this.url);
+    }
+}
+```
+
+```java
+public class UserDaoImpl2 implements UserDao{
+    private String url = "2";
+    @Override
+    public void printUrl() {
+        System.out.println(this.url);
+    }
+}
+```
+
+```java
+@Bean
+public UserDao userDaoImpl1(){
+    return new UserDaoImpl1();
+}
+@Bean
+public UserDao userDaoImpl2(){
+    return new UserDaoImpl2();
+}
+```
+
+
+
+ ```java
+ @Service
+ public class TestService {
+     @Autowired
+     private UserDao userDao;
+ 
+     public void invokeUserDaoPrint(){
+         userDao.printUrl();
+     }
+ }
+ ```
+
+```java
+@Test
+public void test02(){
+    AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext(MainConfig1.class);
+    TestService testService = context.getBean("testService", TestService.class);
+    testService.invokeUserDaoPrint();
+}
+```
+
+如果这时候进行测试，会直接报错，因为TestService中的UserDao具体是哪一个容器并不知道。
+
+```bash
+available: expected single matching bean but found 2: userDaoImpl1,userDaoImpl2
+```
+
+所以，解决方案是使用@Primary来告诉容器，优先要注入的是哪一个
+
+```java
+@Bean
+@Primary
+public UserDao userDaoImpl1(){
+    return new UserDaoImpl1();
+}
+@Bean
+public UserDao userDaoImpl2(){
+    return new UserDaoImpl2();
+}
+```
+
+```bash
+1		//注入UserDaoImpl1成功
+```
+
+或者也可以使用@Qualifier来进行注入
+
+```java
+@Autowired
+@Qualifier("userDaoImpl2")
+private UserDao userDao;
+```
+
+```bash
+2
+```
+
+#### @Resource
+
+@Resource也可以将bean注入到容器中。@Resource是JSR250规范中的注解。
+
+@Resource与@Autowired的异同
+
+同：效果一样，都可以进行bean的装配
+
+异:   @Resource不支持@Primary  
+
+​		@Autowired可以使用@Autowired(required=false),进行这种设置后，如果@Autowired在容器中没有找到相应的bean，就不会进行注入操作，并不会报错。但是@Resource没有这种选项，只会发生报错。
+
+补充：
+
+1、@Resource是JDK原生的注解，@Autowired是Spring2.5 引入的注解
+
+2、@Resource有两个属性name和type。Spring将@Resource注解的name属性解析为bean的名字，而type属性则解析为bean的类型。所以如果使用name属性，则使用byName的自动注入策略，而使用type属性时则使用byType自动注入策略。如果既不指定name也不指定type属性，这时将通过反射机制使用byName自动注入策略。
+
+@Autowired只根据type进行注入，不会去匹配name。如果涉及到type无法辨别注入对象时，那需要依赖@Qualifier或@Primary注解一起来修饰。
+
+#### @Inject
+
+需要pom中额外引入javax.inject,和Autowired功能类似，支持@Primary,但是不支持required=false,该注解不依赖于Spring。可以注入到其他容器中。
+
+### Spring(五) AOP的基本使用
+
+![image-20220327222018648](EnjoySpring.assets/image-20220327222018648.png)
+
+#### 自动装配：Aware注入Spring组件原理
+
+![image-20220327225445740](EnjoySpring.assets/image-20220327225445740.png)
+
+各种感知器都是实现了Aware接口。
+
+`aware`,翻译过来是知道的，已感知的，意识到的，所以这些接口从字面意思应该是能感知到所有`Aware`前面的含义。比如ApplicationContextAware就是可以感知到ApplicationContext。
+
+所以`BeanNameAware`接口是为了让**自身`Bean`能够感知到**，**获取到自身在Spring容器中的id属性**。
+
+同理，其他的`Aware`接口也是为了能够感知到自身的一些属性。
+ 比如实现了`ApplicationContextAware`接口的类，能够获取到`ApplicationContext`，实现了`BeanFactoryAware`接口的类，能够获取到`BeanFactory`对象。
+
+```java
+@Component
+public class Light implements ApplicationContextAware, BeanNameAware, EmbeddedValueResolverAware {
+    private ApplicationContext context;
+    
+    @Override
+    public void setBeanName(String name) {
+        //感知bean自身的名字
+        System.out.println("当前bean的名字为: " + name);
+    }
+
+    @Override
+    public void setApplicationContext(ApplicationContext applicationContext) throws BeansException {
+        //感知到bean自身所在的容器
+        this.context = applicationContext;
+        System.out.println("传入的IOC容器为:" + this.context);
+    }
+
+    @Override
+    public void setEmbeddedValueResolver(StringValueResolver resolver) {
+        //感知到字符值解析器
+        String result = resolver.resolveStringValue("你好${os.name},计算#{3*8}");
+        System.out.println("解析的字符串为: " + result);
+    }
+}
+```
+
+![image-20220328163819126](EnjoySpring.assets/image-20220328163819126.png)
+
+#### SpringAOP
+
+AOP:面向切面编程[底层就是动态代理]
+
+指程序在运行期间动态的将某段代码切入到指定方法位置进行运行的编程方式。
+
+AOP通知方法：
+
+![image-20220328164002053](EnjoySpring.assets/image-20220328164002053.png)
+
+引入依赖
+
+```xml
+<!-- https://mvnrepository.com/artifact/org.springframework/spring-aspects -->
+<dependency>
+    <groupId>org.springframework</groupId>
+    <artifactId>spring-aspects</artifactId>
+    <version>5.2.9.RELEASE</version>
+</dependency>
+```
+
+需要被切入的业务逻辑方法
+
+```java
+@Component("calculator")
+public class Calculator {
+    //假设这是业务逻辑方法
+    public int div(int i,int j){
+        return i / j;
+    }
+}
+
+```
+
+定义切面，然后编写切入点方法
+
+```java
+/**
+ * 日志切面类的方法需要动态感知到业务逻辑方法的运行，
+ * 通知方法：通知方法是对方法运行到的地点进行通知。也即拦截方法运行的过程
+ *      前置通知 @Before：在我们执行目标业务逻辑方法之前执行。
+ *      后置通知 @After：在我们执行目标业务逻辑方法运行结束之后执行，不管有无异常
+ *      返回通知 @AfterReturning：在我们目标业务逻辑方法正常返回值之后执行
+ *      异常通知 @AfterThrowing：在我们目标业务逻辑方法出现异常后运行
+ *      环绕通知 @Around：动态代理。我们定义一个方法，然后在这个方法里随意写代码进行增强，然后手动执行
+ *      业务逻辑方法。
+ */
+@Aspect
+@Component
+public class LogAspect {
+
+//    @Before("execution (public int com.echo.enjoy.chapter5.aop.*(..))")
+//    在执行com.echo.enjoy.chapter5.aop包的所有类的所有方法之前切入，方法的参数类型和个数无限制，返回值是int类型
+//    @Before("execution (public int com.echo.enjoy.chapter5.aop.Calculator.*(..))")
+//    在执行com.echo.enjoy.chapter5.aop.Calculator类下的所有方法之前切入，方法的参数类型和个数无限制，返回值是int类型
+    @Before("execution (public int com.echo.enjoy.chapter5.aop.Calculator.div(int,int))")
+    //在执行com.echo.enjoy.chapter5.aop.Calculator.div的方法前切入，方法的参数是两个int类型，返回值是int类型，这种是最具体的写法
+    public void logStart(){
+        System.out.println("业务逻辑方法开始运行...");
+    }
+
+    @After("execution (public int com.echo.enjoy.chapter5.aop.Calculator.div(int,int))")
+    public void logEnd(){
+        System.out.println("业务逻辑方法运行结束...");
+    }
+
+    @AfterReturning("execution (public int com.echo.enjoy.chapter5.aop.Calculator.div(int,int))")
+    public void logReturning(){
+        System.out.println("业务逻辑方法正常返回...");
+    }
+
+    @AfterThrowing("execution (public int com.echo.enjoy.chapter5.aop.Calculator.div(int,int))")
+    public void logException(){
+        System.out.println("业务逻辑方法抛出异常...");
+    }
+
+    @Around("execution (public int com.echo.enjoy.chapter5.aop.Calculator.div(int,int))")
+    public Object around(ProceedingJoinPoint joinPoint) throws Throwable {
+        System.out.println("环绕通知：执行目标方法之前");
+        Object obj = joinPoint.proceed();   //通过反射机制调用业务逻辑方法。我们决定什么时候区调用业务逻辑方法
+        System.out.println("环绕通知：执行目标方法之后");
+        return obj;
+    }
+}
+```
+
+**可以将切入点抽象出来**
+
+```java
+@Aspect
+@Component
+public class LogAspect {
+
+    //将拦截的方法路径抽取出来，进行解耦
+    @Pointcut("execution (public int com.echo.enjoy.chapter5.aop.Calculator.div(int,int))")
+    public void pointCut(){}
+
+//    @Before("execution (public int com.echo.enjoy.chapter5.aop.*(..))")
+//    在执行com.echo.enjoy.chapter5.aop包的所有类的所有方法之前切入，方法的参数类型和个数无限制，返回值是int类型
+//    @Before("execution (public int com.echo.enjoy.chapter5.aop.Calculator.*(..))")
+//    在执行com.echo.enjoy.chapter5.aop.Calculator类下的所有方法之前切入，方法的参数类型和个数无限制，返回值是int类型
+//    @Before("execution (public int com.echo.enjoy.chapter5.aop.Calculator.div(int,int))")
+    //在执行com.echo.enjoy.chapter5.aop.Calculator.div的方法前切入，方法的参数是两个int类型，返回值是int类型，这种是最具体的写法
+    @Before("pointCut()")
+    public void logStart(){
+        System.out.println("业务逻辑方法开始运行...");
+    }
+
+    @After("pointCut()")
+    public void logEnd(){
+        System.out.println("业务逻辑方法运行结束...");
+    }
+
+    @AfterReturning("pointCut()")
+    public void logReturning(){
+        System.out.println("业务逻辑方法正常返回...");
+    }
+
+    @AfterThrowing("pointCut()")
+    public void logException(){
+        System.out.println("业务逻辑方法抛出异常...");
+    }
+    @Around("pointCut()")
+    public Object around(ProceedingJoinPoint joinPoint) throws Throwable {
+        System.out.println("环绕通知：执行目标方法之前");
+        Object obj = joinPoint.proceed();   //通过反射机制调用业务逻辑方法。
+        System.out.println("环绕通知：执行目标方法之后");
+        return obj;
+    }
+}
+```
+
+配置类，开启切面支持
+
+```java
+@Configuration
+@ComponentScan(value = "com.echo.enjoy.chapter5")
+@EnableAspectJAutoProxy //开启切面，原生态的Spring需要手动开启，SpringBoot中已经封装好了
+public class Config {
+}
+```
+
+测试
+
+```java
+@Test
+public void test02(){
+    AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext(Config.class);
+    Calculator calculator = context.getBean("calculator", Calculator.class);
+    int div = calculator.div(4, 2);
+    System.out.println(div);
+}
+```
+
+结果
+
+```bash
+环绕通知：执行目标方法之前
+业务逻辑方法开始运行...
+业务逻辑方法正常返回...
+业务逻辑方法运行结束...
+环绕通知：执行目标方法之后
+2
+```
+
+异常
+
+```java
+@Test
+public void test02(){
+    AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext(Config.class);
+    Calculator calculator = context.getBean("calculator", Calculator.class);
+    int div = calculator.div(4, 0);
+    System.out.println(div);
+}
+```
+
+```bash
+环绕通知：执行目标方法之前
+业务逻辑方法开始运行...
+业务逻辑方法抛出异常...
+业务逻辑方法运行结束...
+
+java.lang.ArithmeticException: / by zero
+```
+
+将异常通知进行改造，让业务逻辑方法中抛出的异常对象被异常通知拿到
+
+```java
+@AfterThrowing(value = "pointCut()",throwing = "exception")
+public void logException(Exception exception){
+    System.out.println("业务逻辑方法抛出异常...: " + exception);
+}
+```
+
+![image-20220328223231067](EnjoySpring.assets/image-20220328223231067.png)
+
+```bash
+环绕通知：执行目标方法之前
+业务逻辑方法开始运行...
+业务逻辑方法抛出异常...: java.lang.ArithmeticException: / by zero
+业务逻辑方法运行结束...
+```
+
+**通过JoinPoint来获取切入点方法的元信息**
+
+![image-20220328223958310](EnjoySpring.assets/image-20220328223958310.png)
+
+```java
+@Aspect
+@Component
+public class LogAspect {
+
+    //将拦截的方法路径抽取出来，进行解耦
+    @Pointcut("execution (public int com.echo.enjoy.chapter5.aop.Calculator.div(int,int))")
+    public void pointCut(){}
+
+    @Before("pointCut()")
+    public void logStart(JoinPoint joinPoint){
+        System.out.println();
+        System.out.println("**************前置通知开始************");
+        System.out.println("业务逻辑方法"+joinPoint.getSignature().getName()+
+                " 开始运行之前传入的参数是:" + Arrays.asList(joinPoint.getArgs()));
+        System.out.println("**************前置通知结束************");
+        System.out.println();
+    }
+
+    @After("pointCut()")
+    public void logEnd(JoinPoint joinPoint){
+
+        System.out.println();
+        System.out.println("**************后置通知开始************");
+        System.out.println("业务逻辑方法"+joinPoint.getSignature().getName()+"运行结束...");
+        System.out.println("**************后置通知结束************");
+        System.out.println();
+
+    }
+
+    @AfterReturning(value = "pointCut()",returning = "value")
+    public void logReturning(JoinPoint joinPoint,int value){
+        System.out.println();
+        System.out.println("**************返回通知开始************");
+        System.out.println("业务逻辑方法"+joinPoint.getSignature().getName()+"的返回值是：" + value);
+        System.out.println("**************返回通知结束************");
+        System.out.println();
+
+    }
+
+    @AfterThrowing(value = "pointCut()",throwing = "exception")
+    public void logException(JoinPoint joinPoint,Exception exception){
+        System.out.println();
+        System.out.println("**************异常通知开始************");
+        System.out.println("业务逻辑方法"+joinPoint.getSignature().getName() + "抛出的异常是" + exception);
+        System.out.println("**************异常通知结束************");
+        System.out.println();
+    }
+
+    @Around("pointCut()")
+    public Object around(ProceedingJoinPoint joinPoint) throws Throwable {
+        System.out.println();
+        System.out.println("------------环绕通知：执行目标方法" + joinPoint.getSignature().getName() + "之前------------");
+        Object obj = joinPoint.proceed();   //通过反射机制调用业务逻辑方法。
+        System.out.println("------------环绕通知：执行目标方法" + joinPoint.getSignature().getName() + "之后------------");
+        System.out.println();
+        return obj;
+    }
+}
+```
+
+```bash
+------------环绕通知：执行目标方法div之前------------
+
+**************前置通知开始************
+业务逻辑方法div 开始运行之前传入的参数是:[4, 2]
+**************前置通知结束************
+
+
+**************返回通知开始************
+业务逻辑方法div的返回值是：2
+**************返回通知结束************
+
+
+**************后置通知开始************
+业务逻辑方法div运行结束...
+**************后置通知结束************
+
+------------环绕通知：执行目标方法div之后------------
+
+2
+```
+
+
+
+使用@EnableAspectJAutoProxy，
+
+```java
+@Import(AspectJAutoProxyRegistrar.class)
+public @interface EnableAspectJAutoProxy {
+    /../
+}
+```
+
+会Import，将AspectJAutoProxyRegistrar这个bean注入到容器中，然后会发生很多连锁反应，最后将一个beanid为：org.springframework.aop.config.internalAutoProxyCreator，然后类型为AnnotationAwareAspectJAutoProxyCreator.class的bean注入到容器中。然后这个AnnotationAwareAspectJAutoProxyCreator贯穿了AOP的所有功能

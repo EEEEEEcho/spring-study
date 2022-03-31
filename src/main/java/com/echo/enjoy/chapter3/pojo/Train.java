@@ -2,6 +2,7 @@ package com.echo.enjoy.chapter3.pojo;
 
 import org.springframework.beans.factory.DisposableBean;
 import org.springframework.beans.factory.InitializingBean;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
 
 //@Component
