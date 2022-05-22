@@ -5363,3 +5363,403 @@ public class WebLogAspect {
 ```
 
 ![image-20220428210522795](EnjoySpring.assets/image-20220428210522795.png)
+
+#### 14.SpringBoot热启动
+
+使用spring-boot-devtools可以进行热部署。它本质上是使用两个类加载器，一个加载变化的代码，一个加载不产生变化的代码。
+
+```xml
+<!--  热加载      -->
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-devtools</artifactId>
+</dependency>
+```
+
+关闭模板引擎的缓存
+
+```yml
+spring:
+   thymeleaf:
+    cache: false
+```
+
+如果使用IDEA，添加一个插件
+
+```xml
+<build>
+    <plugins>
+        <plugin>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-maven-plugin</artifactId>
+            <configuration>
+                <!-- 如果不设置fork为true，那么会不restart，devtools热部署不会起作用                  -->
+                <fork>true</fork>
+            </configuration>
+            <version>2.4.1</version>
+        </plugin>
+    </plugins>
+</build>
+```
+
+然后在设置中打开自动编译
+
+![image-20220429144828783](EnjoySpring.assets/image-20220429144828783.png)
+
+算了，看SpringCloud中的笔记吧
+
+#### 15.SpringBoot的打包
+
+加插件
+
+```xml
+<build>
+    <plugins>
+        <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-compiler-plugin</artifactId>
+            <configuration>
+                <source>1.8</source>
+                <target>1.8</target>
+            </configuration>
+            <version>3.8.1</version>
+        </plugin>
+        <plugin>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-maven-plugin</artifactId>
+            <configuration>
+                <!-- 如果不设置fork为true，那么会不restart，devtools热部署不会起作用                  -->
+                <fork>true</fork>
+            </configuration>
+            <version>2.4.1</version>
+            <executions>
+                <execution>
+                    <goals>
+                        <goal>repackage</goal>
+                    </goals>
+                </execution>
+            </executions>
+        </plugin>
+    </plugins>
+</build>
+```
+
+**打jar包。**
+
+配置好插件之后，直接使用maven打包就行
+
+**打war包**
+
+首先修改pom文件
+
+![image-20220429150250874](EnjoySpring.assets/image-20220429150250874.png)
+
+然后修改主启动类
+
+```java
+@SpringBootApplication
+@MapperScan("com.echo.mapper")
+@EnableTransactionManagement
+public class MainApplication extends SpringBootServletInitializer {
+    public static void main(String[] args) {
+        /**
+         * 参数1： 启动类的claas
+         * 参数2： 定制化的参数
+         */
+        SpringApplication.run(MainApplication.class,args);
+    }
+
+    @Override
+    protected SpringApplicationBuilder configure(SpringApplicationBuilder builder) {
+        return builder.sources(MainApplication.class);
+    }
+}
+```
+
+而且一定要有web.xml文件
+
+### Spring(十五) SpringBoot进阶
+
+#### 1.集成Redis的Starter
+
+pom
+
+```xml
+<!--  Redis      -->
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-data-redis</artifactId>
+</dependency>
+```
+
+配置文件
+
+```yml
+spring:
+  redis:
+    database: 0         # 数据库
+    host: 127.0.0.1     # 主机
+    port: 6379          # 端口号
+    timeout: 5000       # 超时时间
+    password:           # 密码
+```
+
+测试
+
+```java
+@SpringBootTest(classes = {MainApplication.class})
+@RunWith(SpringRunner.class)
+public class RedisTest {
+    @Resource
+    private RedisTemplate<String,String> redisTemplate;
+
+    @Test
+    public void testRedis() throws Exception{
+        ValueOperations<String, String> ops = redisTemplate.opsForValue();
+        ops.set("name","echo");
+        String value = ops.get("name");
+        System.out.println(value);
+    }
+}
+```
+
+#### 2.集成RabbitMQ
+
+https://blog.csdn.net/EEEEEEcho/article/details/117332948?spm=1001.2014.3001.5501
+
+#### 3.Actuator监控管理
+
+依赖
+
+```xml
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-actuator</artifactId>
+</dependency>
+```
+
+配置
+
+```yml
+# 监控的是这个SpringBoot的服务
+# 加载所有的端点，默认是只加载了info/health
+management:
+  endpoints:
+    web:
+      exposure:
+        include: "*"
+```
+
+http://localhost:8080/echo/actuator
+
+![image-20220429170212826](EnjoySpring.assets/image-20220429170212826.png)
+
+#### 4.自动装配
+
+- @SpringApplication注解中的@EnableAutoConfiguration会向容器中导入一个Bean  -- AutoConfigurationImportSelector.class,该bean的作用是读取引入starter的jar包中的META-INF/spring.factories文件。
+
+  ```java
+  @Target(ElementType.TYPE)
+  @Retention(RetentionPolicy.RUNTIME)
+  @Documented
+  @Inherited
+  @SpringBootConfiguration
+  @EnableAutoConfiguration
+  @ComponentScan(excludeFilters = { @Filter(type = FilterType.CUSTOM, classes = TypeExcludeFilter.class),
+  		@Filter(type = FilterType.CUSTOM, classes = AutoConfigurationExcludeFilter.class) })
+  public @interface SpringBootApplication {}
+  ```
+
+  ```java
+  @Target(ElementType.TYPE)
+  @Retention(RetentionPolicy.RUNTIME)
+  @Documented
+  @Inherited
+  @AutoConfigurationPackage
+  @Import(AutoConfigurationImportSelector.class)
+  public @interface EnableAutoConfiguration {
+  
+  	String ENABLED_OVERRIDE_PROPERTY = "spring.boot.enableautoconfiguration";
+  
+  	/**
+  	 * Exclude specific auto-configuration classes such that they will never be applied.
+  	 * @return the classes to exclude
+  	 */
+  	Class<?>[] exclude() default {};
+  
+  	/**
+  	 * Exclude specific auto-configuration class names such that they will never be
+  	 * applied.
+  	 * @return the class names to exclude
+  	 * @since 1.3.0
+  	 */
+  	String[] excludeName() default {};
+  
+  }
+  ```
+
+  ```java
+  public class AutoConfigurationImportSelector implements DeferredImportSelector, BeanClassLoaderAware,
+  ResourceLoaderAware, BeanFactoryAware, EnvironmentAware, Ordered {
+  }
+  ```
+
+- Starter的META-INF/spring.factories文件中包含了该Starter的自动装配类的位置
+  ![image-20220429173052173](EnjoySpring.assets/image-20220429173052173.png)
+  该自动装配类会去XXXProperties中找需要自动装配的所有属性
+
+- XXXProperties文件中包含了需要进行配置的属性，并从application.properties中去读取开发者配置的这些属性
+  ![image-20220429173330913](EnjoySpring.assets/image-20220429173330913.png)
+
+- 总体的过程是
+  application.properties -----被加载----> MyBatisProperties.class ---被加载---> MybatisAutoConfiguration.class
+
+#### 5.自定义Starter
+
+新建一个Moudle，然后导入依赖
+
+```xml
+<dependencies>
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter</artifactId>
+    </dependency>
+    <!-- https://mvnrepository.com/artifact/redis.clients/jedis -->
+    <dependency>
+        <groupId>redis.clients</groupId>
+        <artifactId>jedis</artifactId>
+        <version>3.3.0</version>
+    </dependency>
+</dependencies>
+```
+
+新建配置文件application.properties
+
+```properties
+redis.host=127.0.0.1
+redis.port=6379
+```
+
+编写Properties
+
+```java
+import org.springframework.boot.context.properties.ConfigurationProperties;
+
+@ConfigurationProperties(prefix = "redis")
+public class RedisProperties {
+    private String host;
+    private int port;
+
+    public String getHost() {
+        return host;
+    }
+
+    public void setHost(String host) {
+        this.host = host;
+    }
+
+    public int getPort() {
+        return port;
+    }
+
+    public void setPort(int port) {
+        this.port = port;
+    }
+}
+```
+
+编写AutoConfiguration
+
+```java
+@Configuration  //开启配置
+@ConditionalOnClass(Jedis.class)        //在包含Jedis的bean时才进行注入
+@EnableConfigurationProperties(RedisProperties.class)   //开启使用映射实体对象
+@ConditionalOnProperty(         //存在对应配置信息时初始化该配置类
+        prefix = "redis",       //配置文件中存在配置前缀redis
+        value = "enabled",          //开启
+        matchIfMissing = true       //确实检查
+)
+public class RedisAutoConfiguration {
+    @Bean
+    @ConditionalOnMissingBean       //当Spring环境中没有Jedis bean时才加载，防止重复的加载
+    public Jedis jedis(RedisProperties redisProperties){
+        return new Jedis(redisProperties.getHost(),redisProperties.getPort());
+    }
+}
+```
+
+在resources目录下新建一个META-INF的文件夹，然后编写spring.factories文件
+
+![image-20220430104549807](EnjoySpring.assets/image-20220430104549807.png)
+
+在该文件中指定配置类的位置
+
+```pr
+org.springframework.boot.autoconfigure.EnableAutoConfiguration=com.echo.redis.RedisAutoConfiguration
+```
+
+测试Starter
+
+新建一个Moudle,然后引入我们自定义的starter,切记G A V 都要写
+
+```xml
+<dependencies>
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-web</artifactId>
+    </dependency>
+    <!-- SpringBoot单元测试 -->
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-test</artifactId>
+    </dependency>
+    <dependency>
+        <groupId>com.echo</groupId>
+        <artifactId>Redis-Starter</artifactId>
+        <version>1.0.0</version>
+    </dependency>
+</dependencies>
+```
+
+然后进行配置
+
+```pro
+redis.host=127.0.0.1
+redis.port=6379
+```
+
+编写测试类
+
+```java
+@SpringBootTest(classes = MainApplication.class)
+@RunWith(SpringRunner.class)
+public class RedisTest {
+    @Resource
+    private Jedis jedis;
+
+    @Test
+    public void test(){
+        jedis.set("name","echo");
+        String name = jedis.get("name");
+        System.out.println(name);
+    }
+}
+```
+
+![image-20220430104802291](EnjoySpring.assets/image-20220430104802291.png)
+
+#### 6. SpringBoot优化
+
+**扫描优化**
+
+@SpringBootApplication该注解会扫描它所在的文件（主启动类）的目录下的所有的bean。所以一些我们不需要扫描进容器的类也会受到扫描，比如说pojo包中的实体类，这些扫描会增加CPU的负担。
+
+
+
+### Spring(十六) SpringBoot高级
+
+看word文档
+
+
+
+#### 1.
